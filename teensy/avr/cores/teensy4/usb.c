@@ -205,7 +205,15 @@ FLASHMEM void usb_init(void)
 	USB1_USBCMD = USB_USBCMD_RS;
 	//transfer_log_head = 0;
 	//transfer_log_count = 0;
-	//USB1_PORTSC1 |= USB_PORTSC1_PFSC; // force 12 Mbit/sec
+#if defined(XINPUT_INTERFACE) && defined(XINPUT_FORCE_FULL_SPEED) && XINPUT_FORCE_FULL_SPEED
+	// Force USB1 device controller to advertise as full-speed (12 Mbps) only.
+	// Real Microsoft Xbox 360 wired controllers are FS-only with bMaxPacketSize0=8.
+	// Emulating at high-speed exposes a fingerprint mismatch that triggers Linux
+	// xHCI quirks → cyclic disconnect/reconnect. PFSC suppresses HS chirp; PHY
+	// only does FS J/K signaling, kernel sees a genuine-looking FS device.
+	// IMXRT1060RM §66.6.1.39 — PORTSC1 bit 24 (Port Force Full-Speed Connect).
+	USB1_PORTSC1 |= USB_PORTSC1_PFSC;
+#endif
 }
 
 
@@ -690,6 +698,24 @@ static void endpoint0_setup(uint64_t setupdata)
 		} else if (setup.wValue == 0x0100 && setup.wIndex == MULTITOUCH_INTERFACE) {
 			memset(endpoint0_buffer, 0, 8);
 			endpoint0_transmit(endpoint0_buffer, 8, 0);
+			return;
+		}
+		break;
+#endif
+#if defined(XINPUT_INTERFACE)
+	  case 0x01C1:
+		// Linux 6.6+ xpad "magic message" handshake. Kernel commit
+		// db7220c48d8d (Sept 2023) added a vendor IN control transfer at
+		// xpad_start_input(): bmRequestType=0xC1, bRequest=0x01,
+		// wValue=0x0100, wLength=20, timeout=25 ms. Real Microsoft Xbox 360
+		// wired pads return a 20-byte vendor blob; xpad ignores the contents
+		// but treats EP0 STALL (default fall-through here) as fatal —
+		// triggers a port reset → cyclic disconnect/reconnect every 12-35 s.
+		// Reply with 20 zero bytes to satisfy the handshake.
+		if (setup.wValue == 0x0100 && setup.wIndex == 0x0000 && setup.wLength >= 20) {
+			memset(usb_descriptor_buffer, 0, 20);
+			arm_dcache_flush_delete(usb_descriptor_buffer, 20);
+			endpoint0_transmit(usb_descriptor_buffer, 20, 0);
 			return;
 		}
 		break;

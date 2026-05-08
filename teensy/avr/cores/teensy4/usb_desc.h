@@ -950,6 +950,14 @@ let me know?  http://forum.pjrc.com/forums/4-Suggestions-amp-Bug-Reports
   #define ENDPOINT15_CONFIG	ENDPOINT_TRANSMIT_ONLY
 
 #elif defined(USB_XINPUT)
+  // Set to 1 to force USB1 PHY full-speed (12 Mbps) operation, matching a
+  // genuine Microsoft Xbox 360 wired controller byte-for-byte. STRONGLY
+  // RECOMMENDED on Linux — kernels >= 6.6 trip xpad disconnects when the
+  // device emulates at high-speed (480 Mbps). Override to 0 if you need
+  // 1-ms HS framing and accept the Linux compatibility risk.
+  #ifndef XINPUT_FORCE_FULL_SPEED
+    #define XINPUT_FORCE_FULL_SPEED 1
+  #endif
   #define VENDOR_ID		0x045e
   #define PRODUCT_ID		0x028e
   #define MANUFACTURER_NAME	{0x00A9,'M','i','c','r','o','s','o','f','t'}
@@ -962,6 +970,12 @@ let me know?  http://forum.pjrc.com/forums/4-Suggestions-amp-Bug-Reports
   #define BCD_DEVICE 0x0114
   #define DEVICE_ATTRIBUTES 0xA0
   #define DEVICE_POWER	0xFA
+  // Note: a genuine Xbox 360 wired controller advertises bMaxPacketSize0=8.
+  // We keep 64 here because (a) full-speed allows 64 per USB 2.0 §9.6.1,
+  // (b) the Teensy 4 USB1 EP0 hardware queue-head is hardcoded to 64 in
+  // usb.c:usb_init() (`endpoint_queue_head[0].config = (64 << 16) | ...`),
+  // and (c) xpad / XUSB22.sys do not key off bMaxPacketSize0. Only the bus
+  // speed (FS via PFSC) and the per-interface descriptor matter for binding.
   #define EP0_SIZE		64
   #define NUM_ENDPOINTS         6
   #define NUM_INTERFACE		4
